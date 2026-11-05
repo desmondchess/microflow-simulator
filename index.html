@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two-Phase Microflow Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f6f5f2; --surface-1:#fcfcfb; --surface-2:#f0efec; --line:#e2e0da; --line-strong:#cfccc4;
+  --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#76746e;
+  --accent:#2a78d6; --accent-ink:#1c5cab; --danger:#d03b3b;
+  --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a;
+  --grid:#ebe9e4; --solid:#b9b6ad; --halo:#0b0b0b; --veil:rgba(246,245,242,.88);
+  --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:'IBM Plex Sans',system-ui,sans-serif; --serif:'Source Serif 4',Georgia,serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme: dark;
+    --bg:#121211; --surface-1:#1a1a19; --surface-2:#232321; --line:#2e2e2b; --line-strong:#41413d;
+    --text-primary:#f0efec; --text-secondary:#c3c2b7; --text-muted:#99978e;
+    --accent:#3987e5; --accent-ink:#86b6ef; --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70;
+    --grid:#2a2a27; --solid:#4a4944; --veil:rgba(18,18,17,.9);
+  }
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--text-primary);font:14px/1.5 var(--sans)}
+/* page backdrop: the lab photo, fixed, under a soft veil so panels stay readable */
+body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:linear-gradient(var(--veil),var(--veil)),url('assets/lab-background.jpg') center/cover no-repeat}
+/* hero banner: the same photo, shown strongly */
+.hero{position:relative;border-radius:16px;overflow:hidden;padding:44px 40px 40px;color:#fff;min-height:260px;display:flex;flex-direction:column;justify-content:flex-end;
+  background:linear-gradient(90deg,rgba(8,12,20,.88) 0%,rgba(8,12,20,.66) 45%,rgba(8,12,20,.12) 100%),url('assets/lab-background.jpg') center 40%/cover no-repeat;
+  box-shadow:0 18px 50px rgba(10,20,40,.18)}
+.hero .eyebrow{color:rgba(255,255,255,.72)}
+.hero h1{color:#fff;font-size:38px}
+.hero .lede{color:rgba(255,255,255,.86)}
+.hero .lede em{color:#fff}
+@media (max-width:700px){.hero{padding:28px 22px;min-height:220px}.hero h1{font-size:28px}}
+header{padding:24px 32px 0;max-width:1480px;margin:0 auto}
+.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted)}
+h1{font:600 30px/1.15 var(--serif);margin:10px 0 6px;letter-spacing:-.01em}
+.lede{color:var(--text-secondary);max-width:820px;margin:0}
+nav.tabs{display:flex;gap:4px;margin-top:18px;border-bottom:1px solid var(--line)}
+nav.tabs a{padding:10px 14px;color:var(--text-secondary);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
+nav.tabs a[aria-current="page"]{color:var(--text-primary);border-color:var(--text-primary)}
+main{max-width:1480px;margin:0 auto;padding:20px 32px 60px}
+.view{display:none}.view.on{display:block}
+.layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:980px){.layout{grid-template-columns:1fr}}
+.panel{background:var(--surface-1);border:1px solid var(--line);border-radius:10px}
+aside.panel{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+@media (max-width:980px){aside.panel{position:static;max-height:none}}
+details{border-bottom:1px solid var(--line)}
+details:last-child{border-bottom:0}
+summary{cursor:pointer;padding:12px 16px;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center}
+summary::-webkit-details-marker{display:none}
+summary::after{content:'+';font:400 16px var(--mono);color:var(--text-muted)}
+details[open] summary::after{content:'–'}
+.sec{padding:0 16px 14px}
+.row{display:grid;grid-template-columns:1fr 104px;gap:8px;align-items:center;margin:6px 0}
+.row label{color:var(--text-secondary);font-size:13px}
+.row .unit{color:var(--text-muted);font:12px var(--mono);margin-left:4px}
+.pair{display:grid;grid-template-columns:1fr 64px 64px;gap:6px;align-items:center;margin:6px 0}
+.pair label{color:var(--text-secondary);font-size:13px}
+input,select,textarea{font:13px var(--mono);color:var(--text-primary);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.hint{color:var(--text-muted);font-size:12px;margin:6px 0 0}
+.port{border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0;background:var(--surface-2)}
+.port .ph{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:13px;margin-bottom:4px}
+.port .g{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.port .g label{font-size:11px;color:var(--text-muted);display:block}
+.port input,.port select{background:var(--surface-1)}
+button{font:500 13px var(--sans);border-radius:7px;border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text-primary);padding:7px 12px;cursor:pointer}
+button:hover{background:var(--surface-2)}
+button.primary{background:var(--text-primary);color:var(--surface-1);border-color:var(--text-primary)}
+button.primary:hover{opacity:.88}
+button.link{border:0;background:none;color:var(--text-muted);padding:2px 4px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.toolbar .sp{flex:1}
+.toolbar select{width:auto}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.stat{background:var(--surface-1);padding:10px 14px}
+.stat .k{font:500 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
+.stat .v{font:500 16px var(--mono);margin-top:3px;white-space:nowrap}
+.progress{height:3px;background:var(--surface-2)}
+.progress>div{height:100%;width:0;background:var(--text-primary);transition:width .2s}
+.stage{padding:14px 14px 6px;position:relative}
+.fieldbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:6px 10px;background:var(--surface-1);color:var(--text-secondary)}
+.seg button[aria-pressed="true"]{background:var(--text-primary);color:var(--surface-1)}
+.chk{display:inline-flex;gap:6px;align-items:center;color:var(--text-secondary);font-size:13px}
+.chk input{width:auto}
+#cv{width:100%;display:block;cursor:crosshair}
+.cbar{display:flex;align-items:center;gap:10px;margin:8px 0 4px;font:12px var(--mono);color:var(--text-secondary)}
+.cbar .ramp{flex:1;max-width:340px;height:10px;border-radius:3px;border:1px solid var(--line)}
+.tip{position:fixed;pointer-events:none;background:var(--surface-1);border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font:12px/1.5 var(--mono);box-shadow:0 6px 20px rgba(0,0,0,.12);display:none;z-index:20;min-width:170px}
+.tip b{font-family:var(--sans);font-weight:600}
+.charts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border-top:1px solid var(--line)}
+@media (max-width:1200px){.charts{grid-template-columns:1fr}}
+.chart{background:var(--surface-1);padding:14px 14px 8px}
+.chart h3{font:600 13px var(--sans);margin:0 0 2px}
+.chart .sub{color:var(--text-muted);font-size:12px;margin-bottom:6px}
+.chart svg{width:100%;height:190px;display:block;overflow:visible}
+.chart svg text{font:11px var(--mono);fill:var(--text-muted)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-bottom:4px}
+.legend i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:5px;border-radius:2px}
+.err{margin:10px 14px;padding:10px 12px;border:1px solid var(--danger);border-radius:8px;color:var(--danger);display:none;font-size:13px}
+.err b{font-weight:600}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text-primary);color:var(--surface-1);padding:8px 14px;border-radius:8px;font-size:13px;display:none;z-index:30}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:40}
+.modal .box{background:var(--surface-1);border-radius:12px;padding:18px;width:min(640px,92vw)}
+.modal textarea{height:300px}
+.modal .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+/* methods */
+.doc{max-width:860px}
+.doc h2{font:600 22px/1.25 var(--serif);margin:34px 0 8px}
+.doc h3{font:600 15px var(--sans);margin:22px 0 6px}
+.doc p,.doc li{color:var(--text-secondary)}
+.doc strong{color:var(--text-primary);font-weight:600}
+.eq{font:14px/1.9 var(--serif);background:var(--surface-1);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:10px 0;overflow-x:auto;color:var(--text-primary)}
+.eq i{font-style:italic}
+.doc table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px;background:var(--surface-1)}
+.doc th,.doc td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+.doc th{background:var(--surface-2);font-weight:600}
+.doc td.num{font-family:var(--mono);text-align:right;white-space:nowrap}
+.steps{counter-reset:s;list-style:none;padding:0}
+.steps li{counter-increment:s;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+.steps li::before{content:counter(s);position:absolute;left:0;top:8px;width:26px;height:26px;border-radius:50%;background:var(--surface-2);border:1px solid var(--line-strong);font:500 12px/24px var(--mono);text-align:center;color:var(--text-primary)}
+code{font:12.5px var(--mono);background:var(--surface-2);padding:1px 5px;border-radius:4px}
+footer{max-width:1480px;margin:0 auto;padding:0 32px 30px;color:var(--text-muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+<div class="hero">
+  <div class="eyebrow">Process intensification · microscale two-phase flow</div>
+  <h1>Two-Phase Microflow Simulator</h1>
+  <p class="lede">A phase-field solver for immiscible laminar flow (water and cyclohexane by default) that runs in your browser. You set the geometry, inlet and outlet conditions, fluid properties and wall contact angles, then watch the interface, velocity and pressure fields evolve. It uses the same governing equations as COMSOL's <em>Two-Phase Flow, Phase Field</em> interface, so results can be compared directly.</p>
+</div>
+  <nav class="tabs" role="tablist">
+    <a href="#simulator" id="tab-simulator" aria-current="page">Simulator</a>
+    <a href="#methods" id="tab-methods">Model &amp; methods</a>
+  </nav>
+</header>
+
+<main>
+<section class="view on" id="view-simulator">
+<div class="layout">
+  <aside class="panel" id="inputs">
+    <details open><summary>Case preset</summary><div class="sec">
+      <select id="preset"></select>
+      <p class="hint" id="presetNote"></p>
+    </div></details>
+    <details open><summary>Geometry &amp; mesh</summary><div class="sec" id="sec-geom"></div></details>
+    <details open><summary>Inlets &amp; outlets (boundary conditions)</summary><div class="sec">
+      <div id="ports"></div>
+      <button id="addPort" type="button">+ Add port</button>
+      <p class="hint">Positions run along each side: left/right sides measure y from the bottom; bottom/top sides measure x from the left. Inlets use a fully developed parabolic profile with the given mean velocity. Outlets fix the pressure (gauge).</p>
+    </div></details>
+    <details><summary>Fluids</summary><div class="sec" id="sec-fluids"></div></details>
+    <details><summary>Wall wettability</summary><div class="sec">
+      <div class="pair"><span></span><span class="hint" style="margin:0">start</span><span class="hint" style="margin:0">end</span></div>
+      <div id="sec-wet"></div>
+      <p class="hint">Equilibrium contact angle in degrees, measured through <span class="f1name">Fluid 1</span>. It varies linearly from the start to the end of each side (left→right for bottom/top, bottom→top for left/right), so a wettability gradient is just two different numbers.</p>
+    </div></details>
+    <details><summary>Initial condition</summary><div class="sec" id="sec-init"></div></details>
+    <details><summary>Numerics &amp; run length</summary><div class="sec" id="sec-num"></div></details>
+    <details><summary>Save, load &amp; export</summary><div class="sec">
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button id="cfgCopy" type="button">Copy setup (JSON)</button>
+        <button id="cfgLoad" type="button">Load setup…</button>
+        <button id="csvSave" type="button">Download fields (CSV)</button>
+        <button id="csvCopy" type="button">Copy fields (CSV)</button>
+      </div>
+      <p class="hint">The CSV has one row per cell centre: x, y [mm], u, v, |u| [mm/s], p [Pa], φ, Fluid 1 fraction. That matches a COMSOL <em>Export → Data</em> on a regular grid, which is what we'll use for side-by-side comparison.</p>
+    </div></details>
+  </aside>
+
+  <div class="panel">
+    <div class="toolbar">
+      <button class="primary" id="run" type="button">▶ Run</button>
+      <button id="stepBtn" type="button">Step ×200</button>
+      <button id="rebuild" type="button" title="Apply inputs and restart from t = 0">Apply &amp; reset</button>
+      <span class="sp"></span>
+      <span class="hint" id="dirty" style="margin:0;display:none">Inputs changed. Click <b>Apply &amp; reset</b> to use them.</span>
+    </div>
+    <div class="progress"><div id="prog"></div></div>
+    <div class="stats">
+      <div class="stat"><div class="k">Time</div><div class="v" id="sT">0 ms</div></div>
+      <div class="stat"><div class="k">Steps</div><div class="v" id="sN">0</div></div>
+      <div class="stat"><div class="k">Grid</div><div class="v" id="sG">–</div></div>
+      <div class="stat"><div class="k">Δt</div><div class="v" id="sDt">–</div></div>
+      <div class="stat"><div class="k">Δt limited by</div><div class="v" id="sLim" style="font-size:13px">–</div></div>
+      <div class="stat"><div class="k">Speed</div><div class="v" id="sSp">–</div></div>
+      <div class="stat"><div class="k">Max |∇·u|</div><div class="v" id="sDiv">–</div></div>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="stage">
+      <div class="fieldbar">
+        <div class="seg" id="fieldSel" role="group" aria-label="Field">
+          <button data-f="frac" aria-pressed="true">Phase</button>
+          <button data-f="speed">|u|</button>
+          <button data-f="p">Pressure</button>
+          <button data-f="u">u</button>
+          <button data-f="v">v</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="ovIf" checked> Interface (φ = 0)</label>
+        <label class="chk"><input type="checkbox" id="ovVec"> Velocity arrows</label>
+        <label class="chk"><input type="checkbox" id="ovCut" checked> Cut line</label>
+      </div>
+      <canvas id="cv" height="300"></canvas>
+      <div class="cbar"><span id="cbLabel">Fluid 1 fraction</span><span id="cbMin">0</span><div class="ramp" id="cbRamp"></div><span id="cbMax">1</span></div>
+    </div>
+    <div class="charts">
+      <div class="chart"><h3>Outlet flow rate</h3><div class="sub">Q per unit depth, mm²/s (positive = leaving)</div><div class="legend" id="lgQ"></div><svg id="chQ"></svg></div>
+      <div class="chart"><h3><span class="f1name">Fluid 1</span> share of outflow</h3><div class="sub">Q<sub>1</sub> / Q at each outlet</div><div class="legend" id="lgW"></div><svg id="chW"></svg></div>
+      <div class="chart"><h3>Velocity profile on the cut line</h3><div class="sub">u across the channel at x = <span id="cutLbl"></span> mm · dashed = interface
+        <input type="range" id="cutX" min="0" max="1" step="0.001" value="0.5" style="width:100%;margin-top:6px;padding:0;background:none;border:0"></div><svg id="chP"></svg></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<section class="view" id="view-methods">
+<div class="doc" id="methodsDoc">
+<h2 style="margin-top:6px">What the solver does</h2>
+<p>The two fluids are tracked with a <strong>phase-field variable φ</strong>: φ = −1 in Fluid 1 (water), φ = +1 in Fluid 2 (cyclohexane), and a smooth tanh profile of thickness ~ε across the interface. The phase field is moved by the flow and relaxes by Cahn–Hilliard diffusion. In return it sets the local density and viscosity and supplies the surface-tension force to the momentum equation. These are the equations, variable names and default parameters COMSOL uses in its <em>Two-Phase Flow, Phase Field</em> interface.</p>
+
+<h3>1 · Phase field (Cahn–Hilliard, split into two second-order equations)</h3>
+<div class="eq">∂φ/∂<i>t</i> + <b>u</b>·∇φ = ∇·( (γλ/ε²) ∇ψ )<br>
+ψ = −∇·(ε² ∇φ) + (φ² − 1) φ<br>
+λ = 3εσ / √8 &nbsp;(mixing energy density), &nbsp; γ = χ ε² &nbsp;(mobility; χ is COMSOL's “mobility tuning parameter”)</div>
+
+<h3>2 · Laminar flow (incompressible Navier–Stokes, variable properties)</h3>
+<div class="eq">ρ ( ∂<b>u</b>/∂<i>t</i> + (<b>u</b>·∇)<b>u</b> ) = −∇<i>p</i> + ∇·[ μ (∇<b>u</b> + ∇<b>u</b><sup>T</sup>) ] + <b>F</b><sub>st</sub> + ρ<b>g</b> − (12μ/<i>d</i>²)<b>u</b><sub>[optional Hele-Shaw]</sub><br>
+∇·<b>u</b> = 0</div>
+
+<h3>3 · The coupling (multiphysics) terms</h3>
+<div class="eq">V<sub>f,2</sub> = (1 + φ)/2, &nbsp; ρ = ρ<sub>1</sub> + (ρ<sub>2</sub> − ρ<sub>1</sub>) V<sub>f,2</sub>, &nbsp; μ = μ<sub>1</sub> + (μ<sub>2</sub> − μ<sub>1</sub>) V<sub>f,2</sub><br>
+<b>F</b><sub>st</sub> = G ∇φ, &nbsp; G = λ ψ / ε² &nbsp;(chemical potential × phase gradient)</div>
+<p>So the flow needs φ (for ρ, μ and the capillary force) and the phase field needs <b>u</b> (for advection). That two-way exchange is the entire multiphysics coupling. It is the same thing COMSOL's <em>Two-Phase Flow, Phase Field</em> coupling node does between its <em>Laminar Flow</em> and <em>Phase Field</em> interfaces.</p>
+
+<h3>4 · Boundary conditions</h3>
+<table>
+<tr><th>Boundary</th><th>Flow</th><th>Phase field</th></tr>
+<tr><td>Inlet</td><td>Fully developed parabolic profile with mean U (cosine ramp over t<sub>ramp</sub>)</td><td>φ prescribed: pure Fluid 1, pure Fluid 2, or a co-flow split</td></tr>
+<tr><td>Outlet</td><td>Pressure p = p<sub>out</sub>, zero normal velocity gradient</td><td>Zero diffusive flux, advective outflow</td></tr>
+<tr><td>Wetted wall</td><td>No penetration + Navier slip u<sub>t</sub> = β ∂u<sub>t</sub>/∂n (β = slip length; COMSOL's default is β = h)</td><td><b>n</b>·ε²∇φ = −ε² cos θ<sub>w</sub> |∇φ| with |∇φ| = (1−φ²)/(√2 ε), θ<sub>w</sub> through Fluid 1; zero flux of ψ</td></tr>
+</table>
+
+<h2>How the equations are solved</h2>
+<p>A uniform <strong>staggered (MAC) grid</strong> stores pressure, φ and ψ at cell centres and the velocity components on cell faces, which avoids pressure checkerboarding. The geometry is a <strong>cell mask</strong>: each cell is fluid or solid, and the cells just outside the domain are tagged as wall, inlet or outlet. The solver never assumes a rectangle, so an imported shape uses exactly the same code path. Each time step:</p>
+<ol class="steps">
+<li><strong>Update mixture properties</strong> ρ(φ), μ(φ) at every cell.</li>
+<li><strong>Chemical potential.</strong> Compute ψ from the discrete Laplacian of φ. The wetting condition enters as a prescribed flux on wall faces; inlets are Dirichlet. Then set G = λψ/ε².</li>
+<li><strong>Advance the phase field</strong> with conservative face fluxes: second-order MUSCL (van Leer limiter) advection plus the Cahn–Hilliard flux (γλ/ε²)∇ψ. Because the scheme is written in flux form and the velocity is exactly divergence-free, Fluid 1 is conserved to round-off.</li>
+<li><strong>Momentum predictor.</strong> An explicit step with advection, the full variable-viscosity stress ∇·[μ(∇u+∇uᵀ)], the capillary force G∇φ evaluated on faces, gravity and the optional Hele-Shaw drag. Pressure is left out of this step.</li>
+<li><strong>Pressure projection.</strong> Solve a Poisson equation for p so that the corrected velocity is divergence-free. Using the Dodd–Ferrante splitting, the variable-density operator ∇·(1/ρ ∇p) becomes a constant-coefficient Laplacian with a lagged correction. Its matrix never changes, so it is <strong>factorised once</strong> (banded Cholesky) and each step needs only two triangular solves. That makes the pressure solve direct rather than iterative.</li>
+<li><strong>Correct the velocity</strong> and record outlet fluxes.</li>
+</ol>
+<p><strong>Time step.</strong> The scheme is explicit, so Δt is the smallest of the capillary-wave limit √(ρ̄h³/2πσ), the viscous limit ρh²/4μ, the advective limit and the Cahn–Hilliard stability limit, multiplied by a safety factor. The toolbar shows which limit is active. At microscale the capillary limit nearly always controls, and it scales as h<sup>1.5</sup>, so halving h multiplies the run time by about 11.</p>
+
+<h2>Validation against analytical solutions</h2>
+<p>These checks were run with the same solver code that drives this page:</p>
+<table>
+<tr><th>Case</th><th>Quantity</th><th>Exact</th><th>Computed</th><th>Error</th></tr>
+<tr><td>Plane Poiseuille flow, H = 0.2 mm, 20 cells</td><td>Velocity profile (max deviation)</td><td class="num">6U(y/H)(1−y/H)</td><td class="num">—</td><td class="num">0.25 %</td></tr>
+<tr><td></td><td>Pressure gradient</td><td class="num">−3000 Pa/m</td><td class="num">−2985 Pa/m</td><td class="num">0.50 %</td></tr>
+<tr><td>Static water droplet in cyclohexane, R = 100 µm</td><td>Laplace pressure σ/R</td><td class="num">497 Pa</td><td class="num">508 Pa</td><td class="num">2.0 %</td></tr>
+<tr><td></td><td>Spurious current</td><td class="num">0</td><td class="num">0.12 mm/s</td><td class="num">Ca ≈ 2×10⁻⁶</td></tr>
+<tr><td>Sessile water droplet, θ<sub>w</sub> = 60°</td><td>Equilibrium contact angle</td><td class="num">60.0°</td><td class="num">57.9°</td><td class="num">2.1°</td></tr>
+<tr><td>Sessile water droplet, θ<sub>w</sub> = 120°</td><td>Equilibrium contact angle</td><td class="num">120.0°</td><td class="num">119.5°</td><td class="num">0.5°</td></tr>
+<tr><td>Displacement case (preset 1), 65k steps</td><td>Fluid 1 mass balance</td><td class="num">0</td><td class="num">3.7×10⁻⁷ µm²</td><td class="num">round-off</td></tr>
+</table>
+
+<h2>Mapping to a COMSOL model</h2>
+<table>
+<tr><th>COMSOL setting</th><th>Here</th><th>Note</th></tr>
+<tr><td>Fluid 1 / Fluid 2 (φ = −1 / +1)</td><td>Fluid 1 / Fluid 2</td><td>Same sign convention</td></tr>
+<tr><td>Interface thickness ε<sub>pf</sub> (default h<sub>max</sub>/2)</td><td>ε/h</td><td>Default 1.0 here because a finite-difference grid needs about 4 cells across the interface. Use the same <em>physical</em> ε in both codes.</td></tr>
+<tr><td>Mobility tuning parameter χ (default 1 m·s/kg)</td><td>χ</td><td>Controls contact-line motion and interface relaxation; match it exactly</td></tr>
+<tr><td>Wetted wall, contact angle θ<sub>w</sub></td><td>Wall wettability</td><td>Here θ is measured through Fluid 1. Check which fluid COMSOL's angle refers to in your model with a sessile-drop test; if it is Fluid 2, enter 180° − θ.</td></tr>
+<tr><td>Wetted wall, slip length β (default h)</td><td>Slip length / h</td><td>Set 0 for no-slip on non-wetting walls</td></tr>
+<tr><td>Inlet: laminar inflow, average velocity; phase-field inlet φ<sub>0</sub></td><td>Inlet port</td><td>Fully developed profile</td></tr>
+<tr><td>Outlet: pressure, suppress backflow off</td><td>Outlet port p</td><td>Gauge pressure</td></tr>
+<tr><td>Phase initialization study step</td><td>Initial condition</td><td>Here the tanh profile is set analytically</td></tr>
+</table>
+
+<h2>Scope and limitations</h2>
+<ul>
+<li>The model is <strong>2D planar</strong>, the same as a 2D COMSOL component. Shallow real microchannels are 3D. The optional Hele-Shaw term (channel depth d) adds the depth-averaged wall friction, which is a reasonable first step toward comparison with experiments viewed from above.</li>
+<li>Time stepping is <strong>explicit</strong>, so Δt is bounded by capillary waves. COMSOL's implicit BDF solver takes larger steps per solve but does more work per step. Wall-clock times are comparable for small grids.</li>
+<li>Uniform Cartesian grid. Curved walls from imported CAD are represented as staircases at resolution h.</li>
+<li>Contact-line motion comes from Cahn–Hilliard diffusion plus Navier slip, as in COMSOL. Dynamic angles therefore depend on χ and β, which is why these two must match when comparing.</li>
+</ul>
+
+<h2>Roadmap</h2>
+<ul>
+<li><strong>Geometry import:</strong> 2D DXF exported from a COMSOL geometry or a Fusion 360 sketch, rasterised to the cell mask, with inlets and outlets tagged by layer name.</li>
+<li><strong>COMSOL comparison:</strong> load a COMSOL regular-grid export and show difference maps and error norms against this solver at matched times.</li>
+<li><strong>Experimental validation:</strong> overlay measured interface positions or contact angles from microscope images.</li>
+<li><strong>Performance:</strong> move the solver to a Web Worker / WebGPU and add local refinement near the interface.</li>
+</ul>
+</div>
+</section>
+</main>
+<footer>Built by Dez · Ph.D. candidate, Chemical Engineering · Solver: staggered-grid Navier–Stokes / Cahn–Hilliard, explicit projection, JavaScript.</footer>
+
+<div class="tip" id="tip"></div>
+<div class="toast" id="toast"></div>
+<div class="modal" id="modal"><div class="box">
+  <h3 style="margin:0 0 8px;font:600 15px var(--sans)">Load setup</h3>
+  <p class="hint" style="margin:0 0 8px">Paste a setup JSON copied from this page (SI units).</p>
+  <textarea id="cfgText" spellcheck="false"></textarea>
+  <div class="acts"><button id="mCancel" type="button">Cancel</button><button class="primary" id="mLoad" type="button">Load</button></div>
+</div></div>
+
+<script src="solver.js"></script>
+<script>
+(function(){
+'use strict';
+const $ = (id) => document.getElementById(id);
+const clone = (o) => JSON.parse(JSON.stringify(o));
+
+// --------------------------------------------------------------- presets
+const PRESETS = {
+  displacement: { label: 'Water displaces cyclohexane (1 inlet, 2 outlets)',
+    note: 'Water is injected into a cyclohexane-filled channel. The bottom wall is hydrophilic (45°) and the top is hydrophobic (135°), so the water front leans onto the bottom wall before splitting between the outlets.',
+    cfg() { const c = TPF.defaults(); c.h = 15e-6; c.ports[0].U = 0.02; c.numerics.safety = 0.8; c.tEnd = 0.1; return c; } },
+  coflow: { label: 'Co-flow phase separator',
+    note: 'A stratified water/cyclohexane stream enters through one inlet. The wettability contrast keeps water on the bottom wall, so nearly all of it leaves through the bottom outlet and the top outlet carries pure cyclohexane.',
+    cfg() { const c = TPF.defaults(); c.h = 15e-6; Object.assign(c.ports[0], { U: 0.02, phase: 'coflow', waterFrac: 0.4 }); c.init = { type: 'layers', y0: 0.2e-3 }; c.numerics.safety = 0.8; c.tEnd = 0.08; return c; } },
+  gradient: { label: 'Droplet on a contact-angle gradient',
+    note: 'A water droplet sits on a bottom wall whose contact angle falls linearly from 130° to 50° along x. The unbalanced Young force at the two contact lines drives the droplet toward the more wettable end with no applied flow. This is gradient-driven fluid manipulation in its simplest form.',
+    cfg() { const c = TPF.defaults(); Object.assign(c, { Lx: 2e-3, Ly: 0.3e-3, h: 10e-6, tEnd: 0.02,
+      ports: [{ kind: 'outlet', side: 'top', a: 0.95e-3, b: 1.05e-3, p: 0 }],
+      contact: { bottom: [130, 50], top: [90, 90], left: [90, 90], right: [90, 90], solid: 90 },
+      init: { type: 'droplet', inside: 'fluid1', cx: 0.4e-3, cy: 0, R: 0.12e-3 } });
+      c.numerics.safety = 0.8; c.numerics.ramp = 0; return c; } },
+  sessile: { label: 'Validation: sessile droplet, θ = 60°',
+    note: 'A semicircular water droplet (90°) relaxes to the prescribed 60° contact angle. The measured equilibrium angle is 57.9°. Use this case to check the contact-angle convention against COMSOL.',
+    cfg() { const c = TPF.defaults(); Object.assign(c, { Lx: 0.6e-3, Ly: 0.3e-3, h: 7.5e-6, tEnd: 0.03,
+      ports: [{ kind: 'outlet', side: 'top', a: 0.27e-3, b: 0.33e-3, p: 0 }],
+      contact: { bottom: [60, 60], top: [90, 90], left: [90, 90], right: [90, 90], solid: 90 },
+      init: { type: 'droplet', inside: 'fluid1', cx: 0.3e-3, cy: 0, R: 0.12e-3 } });
+      c.numerics.safety = 0.8; c.numerics.ramp = 0; return c; } },
+  poiseuille: { label: 'Validation: single-phase Poiseuille flow',
+    note: 'A channel full of one fluid with a fully developed inflow and no-slip walls. The cut-line profile should overlay the exact parabola, and the pressure drop should match 12μUL/H². Surface tension is set to 0 here because there is no interface, which removes the capillary time-step limit.',
+    cfg() { const c = TPF.defaults(); Object.assign(c, { Lx: 1e-3, Ly: 0.2e-3, h: 10e-6, tEnd: 0.08,
+      ports: [{ kind: 'inlet', side: 'left', a: 0, b: 0.2e-3, U: 0.01, phase: 'fluid2', waterFrac: 0.5 }, { kind: 'outlet', side: 'right', a: 0, b: 0.2e-3, p: 0 }],
+      init: { type: 'front', fill: 'fluid2', front: -1 } });
+      c.fluids.sigma = 0; c.numerics.slipRatio = 0; c.numerics.ramp = 0; return c; } },
+};
+
+// --------------------------------------------------------------- form schema (display units -> SI)
+const get = (o, path) => path.split('.').reduce((a, k) => a[k], o);
+const set = (o, path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((a, k) => a[k], o)[last] = v; };
+const SCHEMA = {
+  'sec-geom': [
+    ['Lx', 'Length L<sub>x</sub>', 'mm', 1e-3], ['Ly', 'Height L<sub>y</sub>', 'mm', 1e-3], ['h', 'Grid spacing h', 'µm', 1e-6],
+  ],
+  'sec-fluids': [
+    ['fluids.name1', 'Fluid 1 name (φ = −1)', '', 'text'], ['fluids.rho1', 'Fluid 1 density', 'kg/m³', 1], ['fluids.mu1', 'Fluid 1 viscosity', 'mPa·s', 1e-3],
+    ['fluids.name2', 'Fluid 2 name (φ = +1)', '', 'text'], ['fluids.rho2', 'Fluid 2 density', 'kg/m³', 1], ['fluids.mu2', 'Fluid 2 viscosity', 'mPa·s', 1e-3],
+    ['fluids.sigma', 'Interfacial tension σ', 'mN/m', 1e-3],
+  ],
+  'sec-num': [
+    ['numerics.epsRatio', 'Interface thickness ε / h', '', 1], ['numerics.chi', 'Mobility tuning χ', 'm·s/kg', 1],
+    ['numerics.slipRatio', 'Wall slip length β / h', '', 1], ['numerics.safety', 'Time-step safety factor', '', 1],
+    ['numerics.ramp', 'Inlet ramp time', 'ms', 1e-3], ['numerics.depth', 'Channel depth d (0 = off)', 'µm', 1e-6],
+    ['numerics.gy', 'Gravity g<sub>y</sub>', 'm/s²', 1], ['tEnd', 'End time', 'ms', 1e-3],
+  ],
+};
+const fmt = (x) => { if (!Number.isFinite(x)) return ''; const r = Math.round(x * 1e6) / 1e6; return String(r); };
+
+let cfg = null, sim = null, running = false, dirty = false;
+let hist = [], nextSample = 0, field = 'frac';
+
+function inputRow(id, label, unit, val, kind) {
+  const r = document.createElement('div'); r.className = 'row';
+  r.innerHTML = `<label for="${id}">${label}${unit ? `<span class="unit">[${unit}]</span>` : ''}</label><input id="${id}" ${kind === 'text' ? 'type="text"' : 'type="number" step="any"'}>`;
+  r.querySelector('input').value = val; return r;
+}
+
+function renderForm() {
+  for (const sec in SCHEMA) {
+    const el = $(sec); el.innerHTML = '';
+    for (const [path, label, unit, sc] of SCHEMA[sec]) {
+      const v = get(cfg, path);
+      el.appendChild(inputRow('in-' + path, label, unit, sc === 'text' ? v : fmt(v / sc), sc === 'text' ? 'text' : ''));
+    }
+  }
+  // wettability
+  const wet = $('sec-wet'); wet.innerHTML = '';
+  for (const sd of ['bottom', 'top', 'left', 'right']) {
+    const d = document.createElement('div'); d.className = 'pair';
+    d.innerHTML = `<label>${sd[0].toUpperCase() + sd.slice(1)} wall [°]</label><input type="number" step="any" id="th-${sd}-0"><input type="number" step="any" id="th-${sd}-1">`;
+    wet.appendChild(d); $(`th-${sd}-0`).value = cfg.contact[sd][0]; $(`th-${sd}-1`).value = cfg.contact[sd][1];
+  }
+  // init
+  const it = cfg.init, ini = $('sec-init');
+  const fl = (v) => `<option value="fluid1" ${v === 'fluid1' ? 'selected' : ''}>${cfg.fluids.name1}</option><option value="fluid2" ${v === 'fluid2' ? 'selected' : ''}>${cfg.fluids.name2}</option>`;
+  ini.innerHTML = `<div class="row"><label>Type</label><select id="iType">
+      <option value="front">Filled, with a front</option><option value="layers">Stratified layers</option><option value="droplet">Droplet</option></select></div>
+    <div data-i="front"><div class="row"><label>Channel filled with</label><select id="iFill">${fl(it.fill || 'fluid2')}</select></div>
+      <div class="row"><label>Other fluid for x &lt;<span class="unit">[mm]</span></label><input type="number" step="any" id="iFront"></div></div>
+    <div data-i="layers"><div class="row"><label>${cfg.fluids.name1} below y =<span class="unit">[mm]</span></label><input type="number" step="any" id="iY0"></div></div>
+    <div data-i="droplet"><div class="row"><label>Droplet fluid</label><select id="iIn">${fl(it.inside || 'fluid1')}</select></div>
+      <div class="row"><label>Centre x<span class="unit">[mm]</span></label><input type="number" step="any" id="iCx"></div>
+      <div class="row"><label>Centre y<span class="unit">[mm]</span></label><input type="number" step="any" id="iCy"></div>
+      <div class="row"><label>Radius<span class="unit">[mm]</span></label><input type="number" step="any" id="iR"></div>
+      <p class="hint">Put the centre on a wall (y = 0) for a sessile droplet.</p></div>`;
+  $('iType').value = it.type || 'front';
+  $('iFront').value = fmt((it.front ?? 0) / 1e-3); $('iY0').value = fmt((it.y0 ?? cfg.Ly / 2) / 1e-3);
+  $('iCx').value = fmt((it.cx ?? cfg.Lx / 2) / 1e-3); $('iCy').value = fmt((it.cy ?? cfg.Ly / 2) / 1e-3); $('iR').value = fmt((it.R ?? cfg.Ly / 4) / 1e-3);
+  const showInit = () => ini.querySelectorAll('[data-i]').forEach((d) => (d.style.display = d.dataset.i === $('iType').value ? '' : 'none'));
+  $('iType').addEventListener('change', showInit); showInit();
+  renderPorts();
+  document.querySelectorAll('.f1name').forEach((e) => (e.textContent = cfg.fluids.name1));
+}
+
+function renderPorts() {
+  const box = $('ports'); box.innerHTML = '';
+  let nOut = 0;
+  cfg.ports.forEach((p, k) => {
+    const label = p.kind === 'inlet' ? 'Inlet' : `Outlet ${++nOut}`;
+    const d = document.createElement('div'); d.className = 'port';
+    d.innerHTML = `<div class="ph"><span>${label}</span><button class="link" type="button" data-rm="${k}" aria-label="Remove port">Remove</button></div>
+      <div class="g">
+        <div><label>Type</label><select data-k="kind"><option value="inlet">Inlet</option><option value="outlet">Outlet</option></select></div>
+        <div><label>Side</label><select data-k="side"><option>left</option><option>right</option><option>bottom</option><option>top</option></select></div>
+        <div><label>From [mm]</label><input type="number" step="any" data-k="a"></div>
+        <div><label>To [mm]</label><input type="number" step="any" data-k="b"></div>
+        ${p.kind === 'inlet' ? `
+        <div><label>Mean velocity [mm/s]</label><input type="number" step="any" data-k="U"></div>
+        <div><label>Inlet phase</label><select data-k="phase"><option value="fluid1">${cfg.fluids.name1}</option><option value="fluid2">${cfg.fluids.name2}</option><option value="coflow">Co-flow</option></select></div>
+        <div data-cf><label>${cfg.fluids.name1} fraction (co-flow)</label><input type="number" step="any" min="0" max="1" data-k="waterFrac"></div>`
+        : `<div><label>Pressure [Pa]</label><input type="number" step="any" data-k="p"></div>`}
+      </div>`;
+    box.appendChild(d);
+    const q = (k2) => d.querySelector(`[data-k="${k2}"]`);
+    q('kind').value = p.kind; q('side').value = p.side; q('a').value = fmt(p.a / 1e-3); q('b').value = fmt(p.b / 1e-3);
+    if (p.kind === 'inlet') { q('U').value = fmt(p.U / 1e-3); q('phase').value = p.phase || 'fluid1'; q('waterFrac').value = p.waterFrac ?? 0.5;
+      const cf = () => (d.querySelector('[data-cf]').style.display = q('phase').value === 'coflow' ? '' : 'none'); q('phase').addEventListener('change', cf); cf(); }
+    else q('p').value = fmt(p.p);
+    q('kind').addEventListener('change', () => { cfg.ports = readPorts(); const np = cfg.ports[k]; if (np.kind === 'inlet') Object.assign(np, { U: np.U ?? 0.01, phase: 'fluid1', waterFrac: 0.5 }); else np.p = np.p ?? 0; renderPorts(); markDirty(); });
+  });
+  box.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { cfg.ports = readPorts(); cfg.ports.splice(Number(b.dataset.rm), 1); renderPorts(); markDirty(); }));
+}
+
+function readPorts() {
+  return [...$('ports').querySelectorAll('.port')].map((d) => {
+    const q = (k) => d.querySelector(`[data-k="${k}"]`);
+    const p = { kind: q('kind').value, side: q('side').value, a: Number(q('a').value) * 1e-3, b: Number(q('b').value) * 1e-3 };
+    if (q('U')) { p.U = Number(q('U').value) * 1e-3; p.phase = q('phase').value; p.waterFrac = Number(q('waterFrac').value); } else if (q('p')) p.p = Number(q('p').value); else p.p = 0;
+    return p;
+  });
+}
+
+function readForm() {
+  const c = clone(cfg);
+  for (const sec in SCHEMA) for (const [path, , , sc] of SCHEMA[sec]) {
+    const el = $('in-' + path);
+    if (sc === 'text') set(c, path, el.value || path); else {
+      const v = Number(el.value);
+      if (!Number.isFinite(v)) throw new Error(`“${el.closest('.row').querySelector('label').textContent}” is not a number.`);
+      set(c, path, v * sc);
+    }
+  }
+  for (const sd of ['bottom', 'top', 'left', 'right']) c.contact[sd] = [Number($(`th-${sd}-0`).value), Number($(`th-${sd}-1`).value)];
+  const t = $('iType').value;
+  c.init = t === 'front' ? { type: 'front', fill: $('iFill').value, front: Number($('iFront').value) * 1e-3 }
+    : t === 'layers' ? { type: 'layers', y0: Number($('iY0').value) * 1e-3 }
+    : { type: 'droplet', inside: $('iIn').value, cx: Number($('iCx').value) * 1e-3, cy: Number($('iCy').value) * 1e-3, R: Number($('iR').value) * 1e-3 };
+  c.ports = readPorts();
+  if (!c.ports.some((p) => p.kind === 'outlet')) throw new Error('Add at least one outlet. The pressure needs a reference boundary.');
+  if (c.h <= 0 || c.Lx <= 0 || c.Ly <= 0) throw new Error('Lengths and grid spacing must be positive.');
+  const cells = Math.round(c.Lx / c.h) * Math.round(c.Ly / c.h);
+  if (cells > 60000) throw new Error(`That grid has ${cells.toLocaleString()} cells. Keep it under 60,000 for an in-browser run (increase h).`);
+  return c;
+}
+
+function markDirty() { dirty = true; $('dirty').style.display = ''; }
+
+// --------------------------------------------------------------- simulation control
+function showErr(msg) { const e = $('err'); if (!msg) { e.style.display = 'none'; return; } e.innerHTML = `<b>Can't run this setup.</b> ${msg}`; e.style.display = 'block'; }
+
+function build(fromForm) {
+  stop();
+  try {
+    if (fromForm) cfg = readForm();
+    sim = new TPF.Simulation(cfg);
+    showErr('');
+  } catch (e) { showErr(e.message); sim = null; return; }
+  dirty = false; $('dirty').style.display = 'none';
+  hist = []; nextSample = 0; sample();
+  $('cutX').max = String(sim.g.Lx * 1e3); $('cutX').step = String(sim.g.h * 1e3);
+  $('cutX').value = String(Math.min(sim.g.Lx * 1e3, Number($('cutX').value) || sim.g.Lx * 500));
+  if (Number($('cutX').value) <= 0 || Number($('cutX').value) >= sim.g.Lx * 1e3) $('cutX').value = String(sim.g.Lx * 500);
+  $('sG').textContent = `${sim.g.Nx}×${sim.g.Ny}`;
+  $('sDt').textContent = sim.dt.toExponential(2) + ' s';
+  $('sLim').textContent = { capillary: 'capillary', viscous: 'viscous', advective: 'advection', cahnHilliard: 'Cahn–Hilliard', heleShaw: 'Hele-Shaw' }[sim.dtLimitedBy];
+  $('sSp').textContent = '–';
+  draw(true);
+}
+
+function outletIds() { return sim.g.ports.map((p, i) => (p.kind === 'outlet' ? i : -1)).filter((i) => i >= 0); }
+function sample() {
+  if (!sim) return;
+  if (sim.t + 1e-15 < nextSample) return;
+  hist.push({ t: sim.t, s: sim.portStats.map((s) => ({ Q: s.Q, Qw: s.Qw })) });
+  nextSample = sim.t + cfg.tEnd / 300;
+}
+
+let wall0 = 0, simt0 = 0, lastChart = 0;
+function loop() {
+  if (!running || !sim) return;
+  const t0 = performance.now();
+  try {
+    while (performance.now() - t0 < 30 && sim.t < cfg.tEnd) { for (let k = 0; k < 10; k++) sim.step(); sample(); }
+  } catch (e) { stop(); showErr(e.message + ' Try a smaller time-step safety factor or a finer grid.'); }
+  const el = (performance.now() - wall0) / 1000;
+  if (el > 0.5) $('sSp').textContent = `${(((sim.t - simt0) * 1e3) / el).toFixed(2)} ms/s`;
+  draw(false);
+  if (sim.t >= cfg.tEnd) { stop(); toast('Reached end time.'); draw(true); return; }
+  requestAnimationFrame(loop);
+}
+function start() { if (!sim) build(false); if (!sim) return; if (dirty) build(true); if (!sim) return; if (sim.t >= cfg.tEnd) { toast('Already at end time. Raise “End time” or reset.'); return; } running = true; wall0 = performance.now(); simt0 = sim.t; $('run').textContent = '❚❚ Pause'; requestAnimationFrame(loop); }
+function stop() { running = false; $('run').textContent = '▶ Run'; }
+
+// --------------------------------------------------------------- colour maps
+const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const SEQ = ['#eef4fc', '#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b'].map(hex);
+const DIV = ['#1c5cab', '#3987e5', '#86b6ef', '#f0efec', '#f0a3a2', '#e34948', '#a82d2c'].map(hex);
+function rampLUT(stops) {
+  const lut = new Uint8ClampedArray(256 * 3);
+  for (let k = 0; k < 256; k++) {
+    const x = (k / 255) * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), f = x - i;
+    for (let c = 0; c < 3; c++) lut[k * 3 + c] = stops[i][c] + (stops[i + 1][c] - stops[i][c]) * f;
+  }
+  return lut;
+}
+const LUT_SEQ = rampLUT(SEQ), LUT_DIV = rampLUT(DIV);
+const cssRamp = (stops) => `linear-gradient(90deg, ${stops.map((s) => `rgb(${s.join(',')})`).join(',')})`;
+
+const FIELDS = {
+  frac: { label: () => `${cfg.fluids.name1} fraction`, get: (f, k) => 0.5 * (1 - Math.max(-1, Math.min(1, f.phi[k]))), lut: LUT_SEQ, ramp: SEQ, fixed: [0, 1], unit: '' },
+  speed: { label: () => '|u| [mm/s]', get: (f, k) => f.speed[k] * 1e3, lut: LUT_SEQ, ramp: SEQ, unit: 'mm/s' },
+  p: { label: () => 'p [Pa]', get: (f, k) => f.p[k], lut: LUT_SEQ, ramp: SEQ, unit: 'Pa' },
+  u: { label: () => 'u [mm/s]', get: (f, k) => f.u[k] * 1e3, lut: LUT_DIV, ramp: DIV, sym: true, unit: 'mm/s' },
+  v: { label: () => 'v [mm/s]', get: (f, k) => f.v[k] * 1e3, lut: LUT_DIV, ramp: DIV, sym: true, unit: 'mm/s' },
+};
+
+// --------------------------------------------------------------- drawing
+const cv = $('cv'), ctx = cv.getContext('2d');
+const off = document.createElement('canvas'), octx = off.getContext('2d');
+let F = null, geo = null; // last fields + layout
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function draw(forceCharts) {
+  if (!sim) return;
+  const g = sim.g, { Nx, Ny } = g;
+  F = sim.fields();
+  const fd = FIELDS[field];
+  let lo = Infinity, hi = -Infinity;
+  const vals = new Float32Array(Nx * Ny);
+  for (let k = 0; k < Nx * Ny; k++) { const v = fd.get(F, k); vals[k] = v; if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } }
+  if (fd.fixed) [lo, hi] = fd.fixed;
+  if (fd.sym) { const m = Math.max(Math.abs(lo), Math.abs(hi), 1e-12); lo = -m; hi = m; }
+  if (!(hi > lo)) hi = lo + 1e-12;
+  off.width = Nx; off.height = Ny;
+  const img = octx.createImageData(Nx, Ny), solid = hex(css('--solid') || '#b9b6ad');
+  for (let j = 0; j < Ny; j++) for (let i = 0; i < Nx; i++) {
+    const k = i + j * Nx, o = (i + (Ny - 1 - j) * Nx) * 4, v = vals[k];
+    if (!Number.isFinite(v)) { img.data[o] = solid[0]; img.data[o + 1] = solid[1]; img.data[o + 2] = solid[2]; img.data[o + 3] = 255; continue; }
+    const t = Math.max(0, Math.min(255, Math.round(((v - lo) / (hi - lo)) * 255))) * 3;
+    img.data[o] = fd.lut[t]; img.data[o + 1] = fd.lut[t + 1]; img.data[o + 2] = fd.lut[t + 2]; img.data[o + 3] = 255;
+  }
+  octx.putImageData(img, 0, 0);
+
+  // layout with margins for port labels
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth;
+  if (W < 60) { $('sT').textContent = `${(sim.t * 1e3).toFixed(2)} ms`; $('sN').textContent = sim.nstep.toLocaleString(); return; }
+  const mL = 30, mR = 58, mT = 26, mB = 26;
+  const sc = Math.min((W - mL - mR) / g.Lx, 520 / g.Ly);
+  const pw = g.Lx * sc, phh = g.Ly * sc, H = phh + mT + mB;
+  const x0 = mL, y0 = mT;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.height = H + 'px'; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(off, x0, y0, pw, phh);
+  geo = { x0, y0, sc, pw, phh };
+  const X = (x) => x0 + x * sc, Y = (y) => y0 + phh - y * sc;
+  const ink = css('--text-primary'), muted = css('--text-muted'), halo = css('--surface-1');
+
+  // interface contour (marching squares on cell centres)
+  if ($('ovIf').checked) {
+    ctx.beginPath();
+    const h = g.h, P = F.phi;
+    for (let j = 0; j < Ny - 1; j++) for (let i = 0; i < Nx - 1; i++) {
+      const a = P[i + j * Nx], b = P[i + 1 + j * Nx], c = P[i + 1 + (j + 1) * Nx], d = P[i + (j + 1) * Nx];
+      if (!(Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && Number.isFinite(d))) continue;
+      const pts = [];
+      const xi = (i + 0.5) * h, yj = (j + 0.5) * h;
+      if (a * b < 0) pts.push([xi + (a / (a - b)) * h, yj]);
+      if (b * c < 0) pts.push([xi + h, yj + (b / (b - c)) * h]);
+      if (c * d < 0) pts.push([xi + h - (c / (c - d)) * h, yj + h]);
+      if (d * a < 0) pts.push([xi, yj + h - (d / (d - a)) * h]);
+      for (let q = 0; q + 1 < pts.length; q += 2) { ctx.moveTo(X(pts[q][0]), Y(pts[q][1])); ctx.lineTo(X(pts[q + 1][0]), Y(pts[q + 1][1])); }
+    }
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 3.5; ctx.stroke();
+    ctx.strokeStyle = '#0b0b0b'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+  // velocity arrows
+  if ($('ovVec').checked) {
+    const step = Math.max(2, Math.round(Math.max(Nx, Ny) / 32));
+    let vmax = 0; for (let k = 0; k < Nx * Ny; k++) if (F.speed[k] > vmax) vmax = F.speed[k];
+    const L = step * g.h * sc * 0.9;
+    ctx.strokeStyle = '#0b0b0b'; ctx.fillStyle = '#0b0b0b'; ctx.lineWidth = 1.1;
+    for (let j = step >> 1; j < Ny; j += step) for (let i = step >> 1; i < Nx; i += step) {
+      const k = i + j * Nx; if (!Number.isFinite(F.u[k]) || vmax <= 0) continue;
+      const ux = F.u[k] / vmax, vy = F.v[k] / vmax, m = Math.hypot(ux, vy); if (m < 0.03) continue;
+      const cx = X((i + 0.5) * g.h), cy = Y((j + 0.5) * g.h), ex = cx + ux * L, ey = cy - vy * L;
+      const an = Math.atan2(ey - cy, ex - cx), hl = Math.min(5, 2 + 4 * m);
+      const path = () => { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.moveTo(ex - hl * Math.cos(an - 0.45), ey - hl * Math.sin(an - 0.45)); ctx.lineTo(ex, ey); ctx.lineTo(ex - hl * Math.cos(an + 0.45), ey - hl * Math.sin(an + 0.45)); };
+      path(); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 3; ctx.stroke();
+      path(); ctx.strokeStyle = '#0b0b0b'; ctx.lineWidth = 1.2; ctx.stroke();
+    }
+  }
+  // cut line
+  const cutx = Number($('cutX').value) * 1e-3;
+  if ($('ovCut').checked) { ctx.setLineDash([4, 4]); ctx.strokeStyle = ink; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X(cutx), Y(0)); ctx.lineTo(X(cutx), Y(g.Ly)); ctx.stroke(); ctx.setLineDash([]); }
+  // domain outline + ports
+  ctx.strokeStyle = muted; ctx.lineWidth = 1; ctx.strokeRect(x0 - 0.5, y0 - 0.5, pw + 1, phh + 1);
+  ctx.font = '500 11px IBM Plex Mono, monospace'; ctx.textBaseline = 'middle';
+  let nOut = 0;
+  for (const p of g.ports) {
+    const name = p.kind === 'inlet' ? 'IN' : `OUT ${++nOut}`;
+    const a = Math.max(0, p.a), b = Math.min(p.side === 'left' || p.side === 'right' ? g.Ly : g.Lx, p.b);
+    ctx.strokeStyle = ink; ctx.lineWidth = 4; ctx.lineCap = 'butt'; ctx.beginPath();
+    let lx, ly, al = 'center';
+    if (p.side === 'left') { ctx.moveTo(X(0) - 3, Y(a)); ctx.lineTo(X(0) - 3, Y(b)); lx = X(0) - 8; ly = Y((a + b) / 2); al = 'right'; }
+    if (p.side === 'right') { ctx.moveTo(X(g.Lx) + 3, Y(a)); ctx.lineTo(X(g.Lx) + 3, Y(b)); lx = X(g.Lx) + 8; ly = Y((a + b) / 2); al = 'left'; }
+    if (p.side === 'bottom') { ctx.moveTo(X(a), Y(0) + 3); ctx.lineTo(X(b), Y(0) + 3); lx = X((a + b) / 2); ly = Y(0) + 14; }
+    if (p.side === 'top') { ctx.moveTo(X(a), Y(g.Ly) - 3); ctx.lineTo(X(b), Y(g.Ly) - 3); lx = X((a + b) / 2); ly = Y(g.Ly) - 14; }
+    ctx.stroke();
+    // keep side labels inside the canvas
+    ctx.textAlign = al; ctx.lineWidth = 3; ctx.strokeStyle = halo; ctx.strokeText(name, lx, ly); ctx.fillStyle = ink; ctx.fillText(name, lx, ly);
+  }
+  // colour bar
+  $('cbLabel').textContent = fd.label(); $('cbRamp').style.background = cssRamp(fd.ramp);
+  const nf = (v) => (Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(2) : v.toFixed(Math.abs(v) < 10 ? 2 : 1));
+  $('cbMin').textContent = nf(lo); $('cbMax').textContent = nf(hi);
+  // stats
+  $('sT').textContent = `${(sim.t * 1e3).toFixed(2)} ms`; $('sN').textContent = sim.nstep.toLocaleString();
+  $('prog').style.width = `${Math.min(100, (sim.t / cfg.tEnd) * 100)}%`;
+  const now = performance.now();
+  if (forceCharts || now - lastChart > 300) { lastChart = now; $('sDiv').textContent = `${sim.maxDiv().toExponential(1)} 1/s`; drawCharts(); }
+}
+
+// --------------------------------------------------------------- charts (SVG, hover crosshair)
+function niceTicks(lo, hi, n = 4) {
+  if (!(hi > lo)) { hi = lo + 1; }
+  const span = hi - lo, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n + 0.5) || 10 * mag;
+  const t = []; for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + 1e-9 * span; v += step) t.push(Math.abs(v) < step * 1e-9 ? 0 : v);
+  return t;
+}
+const tickFmt = (v) => { const a = Math.abs(v); return a === 0 ? '0' : a >= 1000 || a < 0.01 ? v.toExponential(0) : String(Math.round(v * 1000) / 1000); };
+
+function lineChart(svg, legendEl, opt) {
+  const W = svg.clientWidth || 360, H = 190, m = { l: 46, r: 10, t: 8, b: 30 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  let xlo = opt.xr ? opt.xr[0] : Infinity, xhi = opt.xr ? opt.xr[1] : -Infinity, ylo = Infinity, yhi = -Infinity;
+  for (const s of opt.series) for (const [x, y] of s.pts) { if (!opt.xr) { xlo = Math.min(xlo, x); xhi = Math.max(xhi, x); } if (Number.isFinite(y)) { ylo = Math.min(ylo, y); yhi = Math.max(yhi, y); } }
+  if (opt.yr) { ylo = Math.min(ylo, opt.yr[0]); yhi = Math.max(yhi, opt.yr[1]); }
+  if (!Number.isFinite(ylo)) { ylo = 0; yhi = 1; }
+  if (yhi - ylo < 1e-12) { yhi += 0.5; ylo -= 0.5; }
+  if (!(xhi > xlo)) xhi = xlo + 1;
+  const pad = (yhi - ylo) * 0.06; if (!opt.yr || ylo < opt.yr[0]) ylo -= pad; if (!opt.yr || yhi > opt.yr[1]) yhi += pad;
+  const yt = niceTicks(ylo, yhi), xt = niceTicks(xlo, xhi, 5);
+  ylo = Math.min(ylo, yt[0]); yhi = Math.max(yhi, yt[yt.length - 1]);
+  const X = (x) => m.l + ((x - xlo) / (xhi - xlo)) * pw, Y = (y) => m.t + ph - ((y - ylo) / (yhi - ylo)) * ph;
+  let s = `<g>`;
+  for (const v of yt) s += `<line x1="${m.l}" x2="${m.l + pw}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${Y(v)}" text-anchor="end" dominant-baseline="middle">${tickFmt(v)}</text>`;
+  for (const v of xt) s += `<text x="${X(v)}" y="${m.t + ph + 14}" text-anchor="middle">${tickFmt(v)}</text>`;
+  s += `<line x1="${m.l}" x2="${m.l + pw}" y1="${m.t + ph}" y2="${m.t + ph}" stroke="var(--line-strong)"/>`;
+  if (ylo < 0 && yhi > 0) s += `<line x1="${m.l}" x2="${m.l + pw}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--line-strong)"/>`;
+  s += `<text x="${m.l + pw}" y="${H - 2}" text-anchor="end">${opt.xLabel}</text>`;
+  for (const vx of opt.vlines || []) s += `<line x1="${X(vx)}" x2="${X(vx)}" y1="${m.t}" y2="${m.t + ph}" stroke="var(--text-muted)" stroke-dasharray="3 3"/>`;
+  for (const se of opt.series) {
+    let d = ''; let pen = false;
+    for (const [x, y] of se.pts) { if (!Number.isFinite(y)) { pen = false; continue; } d += (pen ? 'L' : 'M') + X(x).toFixed(1) + ' ' + Y(y).toFixed(1); pen = true; }
+    s += `<path d="${d}" fill="none" stroke="${se.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" ${se.dash ? 'stroke-dasharray="5 4"' : ''}/>`;
+  }
+  s += `<g class="hov" style="display:none"><line class="hx" y1="${m.t}" y2="${m.t + ph}" stroke="var(--text-secondary)" stroke-width="1"/>${opt.series.map((se) => `<circle r="4" fill="${se.color}" stroke="var(--surface-1)" stroke-width="2"/>`).join('')}</g>`;
+  s += `<rect x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="transparent"/></g>`;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.innerHTML = s;
+  if (legendEl) legendEl.innerHTML = opt.series.length > 1 ? opt.series.map((se) => `<span><i style="background:${se.color}${se.dash ? ';background:repeating-linear-gradient(90deg,' + se.color + ' 0 5px,transparent 5px 8px)' : ''}"></i>${se.name}</span>`).join('') : '';
+  const hov = svg.querySelector('.hov'), hx = svg.querySelector('.hx'), dots = [...hov.querySelectorAll('circle')];
+  svg.onmousemove = (ev) => {
+    const r = svg.getBoundingClientRect(), mx = ((ev.clientX - r.left) / r.width) * W;
+    if (mx < m.l || mx > m.l + pw) { hov.style.display = 'none'; hideTip(); return; }
+    const xv = xlo + ((mx - m.l) / pw) * (xhi - xlo);
+    hov.style.display = ''; hx.setAttribute('x1', X(xv)); hx.setAttribute('x2', X(xv));
+    let html = `<b>${opt.xName} ${opt.xFmt(xv)}</b>`;
+    opt.series.forEach((se, i) => {
+      let best = null, bd = Infinity; for (const p of se.pts) { const dd = Math.abs(p[0] - xv); if (dd < bd) { bd = dd; best = p; } }
+      if (best && Number.isFinite(best[1])) { dots[i].setAttribute('cx', X(best[0])); dots[i].setAttribute('cy', Y(best[1])); dots[i].style.display = ''; html += `<br><span style="color:${se.color}">●</span> ${se.name}: ${opt.yFmt(best[1])}`; }
+      else dots[i].style.display = 'none';
+    });
+    showTip(ev, html);
+  };
+  svg.onmouseleave = () => { hov.style.display = 'none'; hideTip(); };
+}
+
+const COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)'];
+function drawCharts() {
+  if (!sim) return;
+  const outs = outletIds();
+  const series = (fn) => outs.slice(0, 3).map((pid, n) => ({ name: `Outlet ${n + 1}`, color: COLORS[n], pts: hist.map((h) => [h.t * 1e3, fn(h.s[pid])]) }));
+  lineChart($('chQ'), $('lgQ'), { series: series((s) => s.Q * 1e6), xLabel: 't [ms]', xName: 't =', xFmt: (x) => x.toFixed(2) + ' ms', yFmt: (y) => y.toFixed(3) + ' mm²/s', xr: [0, cfg.tEnd * 1e3] });
+  lineChart($('chW'), $('lgW'), { series: series((s) => (Math.abs(s.Q) > 1e-12 ? s.Qw / s.Q : NaN)), xLabel: 't [ms]', xName: 't =', xFmt: (x) => x.toFixed(2) + ' ms', yFmt: (y) => (y * 100).toFixed(1) + ' %', xr: [0, cfg.tEnd * 1e3], yr: [0, 1] });
+  // profile at the cut
+  const g = sim.g, { Nx, Ny, h } = g, cutx = Number($('cutX').value) * 1e-3;
+  $('cutLbl').textContent = (cutx * 1e3).toFixed(3);
+  const i = Math.max(0, Math.min(Nx - 1, Math.floor(cutx / h)));
+  const pts = [], ifs = [];
+  for (let j = 0; j < Ny; j++) { const k = i + j * Nx; pts.push([(j + 0.5) * h * 1e3, F.u[k] * 1e3]); if (j > 0 && F.phi[k] * F.phi[k - Nx] < 0) { const a = F.phi[k - Nx], b = F.phi[k]; ifs.push((j - 0.5 + a / (a - b) + 0.5) * h * 1e3); } }
+  const ser = [{ name: 'u (computed)', color: 'var(--series-1)', pts }];
+  if (cfg._exactPoiseuille) { const U = cfg.ports[0].U, H = g.Ly; ser.push({ name: 'exact parabola', color: 'var(--series-2)', dash: true, pts: pts.map(([y]) => [y, 6 * U * (y * 1e-3 / H) * (1 - y * 1e-3 / H) * 1e3]) }); }
+  lineChart($('chP'), null, { series: ser, xLabel: 'y [mm]', xName: 'y =', xFmt: (x) => x.toFixed(3) + ' mm', yFmt: (y) => y.toFixed(3) + ' mm/s', xr: [0, g.Ly * 1e3], vlines: ifs });
+}
+
+// --------------------------------------------------------------- tooltip
+const tip = $('tip');
+function showTip(ev, html) { tip.innerHTML = html; tip.style.display = 'block'; const w = tip.offsetWidth, hgt = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + hgt > innerHeight - 8) y = ev.clientY - hgt - 14; tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+function hideTip() { tip.style.display = 'none'; }
+cv.addEventListener('mousemove', (ev) => {
+  if (!sim || !geo || !F) return;
+  const r = cv.getBoundingClientRect(), px = ev.clientX - r.left, py = ev.clientY - r.top;
+  const x = (px - geo.x0) / geo.sc, y = (geo.y0 + geo.phh - py) / geo.sc, g = sim.g;
+  if (x < 0 || y < 0 || x > g.Lx || y > g.Ly) { hideTip(); return; }
+  const i = Math.min(g.Nx - 1, Math.floor(x / g.h)), j = Math.min(g.Ny - 1, Math.floor(y / g.h)), k = i + j * g.Nx;
+  if (!Number.isFinite(F.phi[k])) { showTip(ev, '<b>Solid</b>'); return; }
+  showTip(ev, `<b>x ${(x * 1e3).toFixed(3)} mm, y ${(y * 1e3).toFixed(3)} mm</b><br>${cfg.fluids.name1} fraction: ${(0.5 * (1 - F.phi[k])).toFixed(3)}<br>|u|: ${(F.speed[k] * 1e3).toFixed(3)} mm/s<br>u, v: ${(F.u[k] * 1e3).toFixed(3)}, ${(F.v[k] * 1e3).toFixed(3)} mm/s<br>p: ${F.p[k].toFixed(2)} Pa`);
+});
+cv.addEventListener('mouseleave', hideTip);
+
+// --------------------------------------------------------------- export / import
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => (t.style.display = 'none'), 2600); }
+function fieldsCSV() {
+  const g = sim.g, f = sim.fields(); const lines = ['x_mm,y_mm,u_mm_s,v_mm_s,speed_mm_s,p_Pa,phi,fluid1_fraction'];
+  for (let j = 0; j < g.Ny; j++) for (let i = 0; i < g.Nx; i++) { const k = i + j * g.Nx; if (!Number.isFinite(f.phi[k])) continue;
+    lines.push([((i + 0.5) * g.h * 1e3).toFixed(5), ((j + 0.5) * g.h * 1e3).toFixed(5), (f.u[k] * 1e3).toExponential(6), (f.v[k] * 1e3).toExponential(6), (f.speed[k] * 1e3).toExponential(6), f.p[k].toExponential(6), f.phi[k].toFixed(6), (0.5 * (1 - f.phi[k])).toFixed(6)].join(',')); }
+  return `# Two-Phase Microflow Simulator export, t = ${sim.t.toExponential(6)} s, grid ${g.Nx}x${g.Ny}, h = ${g.h} m\n` + lines.join('\n') + '\n';
+}
+async function saveFile(name, text) {
+  try {
+    if (window.claude && typeof window.claude.use === 'function') {
+      const d = await window.claude.use('downloads');
+      if (d) { try { await d.save({ filename: name, data: text }); toast('Saved ' + name); } catch (e) { if (e && e.code !== 'declined') toast('Download unavailable here. Use “Copy fields” instead.'); } return; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) { toast('Download unavailable here. Use “Copy fields” instead.'); }
+}
+async function copyText(text, what) { try { await navigator.clipboard.writeText(text); toast(`Copied ${what} to the clipboard.`); } catch (e) { toast('Clipboard is not available in this view.'); } }
+$('csvSave').onclick = () => { if (sim) saveFile(`tpf_fields_t${(sim.t * 1e3).toFixed(2)}ms.csv`, fieldsCSV()); };
+$('csvCopy').onclick = () => { if (sim) copyText(fieldsCSV(), 'field data'); };
+$('cfgCopy').onclick = () => { try { copyText(JSON.stringify(readForm(), null, 2), 'the setup'); } catch (e) { showErr(e.message); } };
+$('cfgLoad').onclick = () => { $('cfgText').value = ''; $('modal').style.display = 'flex'; $('cfgText').focus(); };
+$('mCancel').onclick = () => ($('modal').style.display = 'none');
+$('mLoad').onclick = () => {
+  try { const c = JSON.parse($('cfgText').value); const base = TPF.defaults(); cfg = Object.assign(base, c, { fluids: Object.assign(base.fluids, c.fluids), numerics: Object.assign(base.numerics, c.numerics), contact: Object.assign(base.contact, c.contact) });
+    $('modal').style.display = 'none'; renderForm(); build(false); toast('Setup loaded.'); }
+  catch (e) { toast('That is not valid setup JSON.'); }
+};
+
+// --------------------------------------------------------------- wiring
+const sel = $('preset');
+for (const k in PRESETS) { const o = document.createElement('option'); o.value = k; o.textContent = PRESETS[k].label; sel.appendChild(o); }
+function loadPreset(k) { cfg = PRESETS[k].cfg(); if (k === 'poiseuille') cfg._exactPoiseuille = true; $('presetNote').textContent = PRESETS[k].note; renderForm(); build(false); }
+sel.onchange = () => loadPreset(sel.value);
+$('inputs').addEventListener('input', (e) => { if (e.target.id !== 'preset') markDirty(); });
+$('addPort').onclick = () => { cfg.ports = readPorts(); cfg.ports.push({ kind: 'outlet', side: 'top', a: 0, b: Math.min(0.1e-3, cfg.Lx), p: 0 }); renderPorts(); markDirty(); };
+$('run').onclick = () => (running ? stop() : start());
+$('stepBtn').onclick = () => { if (dirty || !sim) build(true); if (!sim) return; try { sim.run(200); sample(); } catch (e) { showErr(e.message); } draw(true); };
+$('rebuild').onclick = () => build(true);
+$('fieldSel').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; field = b.dataset.f; $('fieldSel').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); draw(false); });
+['ovIf', 'ovVec', 'ovCut'].forEach((id) => $(id).addEventListener('change', () => draw(false)));
+$('cutX').addEventListener('input', () => draw(true));
+window.addEventListener('resize', () => draw(true));
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => draw(true));
+
+function route() {
+  const v = location.hash === '#methods' ? 'methods' : 'simulator';
+  document.querySelectorAll('.view').forEach((s) => s.classList.toggle('on', s.id === 'view-' + v));
+  document.querySelectorAll('nav.tabs a').forEach((a) => a.setAttribute('aria-current', a.id === 'tab-' + v ? 'page' : 'false'));
+  if (v === 'simulator') requestAnimationFrame(() => draw(true));
+}
+window.addEventListener('hashchange', route);
+loadPreset('displacement');
+route();
+})();
+</script>
+</body>
+</html>
